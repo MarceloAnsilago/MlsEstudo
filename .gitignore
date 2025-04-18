@@ -1,0 +1,54 @@
+# ============================
+# AMBIENTE VIRTUAL E PYTHON
+# ============================
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+__pycache__/
+.env
+.venv/
+venv/
+ENV/
+env/
+Pipfile.lock
+poetry.lock
+
+# ============================
+# IDEs E EDITORES
+# ============================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ============================
+# LOGS E TEMPORAIS
+# ============================
+*.log
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+
+# ============================
+# CONFIGS LOCAIS / SENSÍVEIS
+# ============================
+.env
+*.env
+secrets.json
+
+# ============================
+# STREAMLIT / ARQUIVOS DE EXECUÇÃO
+# ============================
+.streamlit/config.toml
+.streamlit/secrets.toml
+**/.pytest_cache/
+**/__pycache__/
+
+# ============================
+# ARQUIVOS DO USUÁRIO
+# ============================
+utils/supabase_client.py
