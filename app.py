@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+
+# Garante que o diretório do projeto esteja no sys.path
+sys.path.append(str(Path(__file__).resolve().parent))
+
 import streamlit as st
 
 # Deve ser a PRIMEIRA linha
