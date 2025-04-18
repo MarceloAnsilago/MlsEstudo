@@ -482,6 +482,19 @@ def render():
     if selected == "Cotações":
         supabase = get_supabase_client()
         usuario_id = st.session_state["usuario"]["id"]
+        cotacoes_base64 = get_base64("logos/cotacoes.png")  # Caminho da imagem
+
+        st.markdown(
+                f"""
+                <div style="display: flex; align-items: center;">
+                    <img src="data:image/png;base64,{cotacoes_base64}"
+                        alt="cotacoes"
+                        style="height: 125px; margin-right: 20px;">
+                    <h1 style="margin: 0;">Cotações</h1>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
         # === LAYOUT CENTRALIZADO ===
         col1, col2, col3 = st.columns([1, 3, 1])
@@ -559,12 +572,14 @@ def render():
 
     if selected == "Análise":
     
-         
+        analise_b64 = get_base64("logos/analise.png")
         st.markdown(
             f"""
             <div style="display: flex; align-items: center;">
-                <img src="data:image/png;base64,{image_base64}" alt="Cotação" style="height: 130px; margin-right: 10px;">
-                <h1 style="margin: 0;">Análise de Cointegração de Ações</h1>
+                <img src="data:image/png;base64,{analise_b64}"
+                    alt="Análise"
+                    style="height: 125px; margin-right: 25px;">
+                <h1 style="margin: 0;">Análise</h1>
             </div>
             """,
             unsafe_allow_html=True
@@ -1002,11 +1017,23 @@ def render():
 
 
     if selected == "Operações":
-        st.title("📊 Operações")
-        st.markdown("---")
         supabase = get_supabase_client()
         usuario_id = st.session_state["usuario"]["id"]
-
+        operacoes_b64 = get_base64("logos/operacoes.png")
+        
+        st.markdown(
+        f"""
+        <div style="display: flex; align-items: center;">
+            <img src="data:image/png;base64,{operacoes_b64}"
+                 alt="Operações"
+                 style="height: 125px; margin-right: 25px;">
+            <h1 style="margin: 0;">Operações</h1>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+              
+       
         try:
             response = (
             supabase.table("operacoes")

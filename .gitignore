@@ -48,7 +48,4 @@ secrets.json
 **/.pytest_cache/
 **/__pycache__/
 
-# ============================
-# ARQUIVOS DO USUÁRIO
-# ============================
-utils/supabase_client.py
+
