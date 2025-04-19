@@ -1,24 +1,24 @@
 # utils/supabase_client.py
 from supabase import create_client, Client
 from dotenv import load_dotenv
+import streamlit as st
 import os
 
-# Carrega automaticamente o .env da raiz
+# Carrega variáveis locais do .env
 load_dotenv()
 
 def get_supabase_client() -> Client:
     """
-    Cria e retorna o cliente Supabase usando variáveis de ambiente.
-    Lança um RuntimeError se SUPABASE_URL ou SUPABASE_KEY não estiverem definidas.
+    Cria e retorna o cliente Supabase, usando st.secrets (Cloud)
+    ou variáveis de ambiente (.env local).
     """
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
+    url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
 
     if not url or not key:
         raise RuntimeError(
             "❌ As credenciais do Supabase não foram definidas. "
-            "Por favor, verifique seu arquivo .env na raiz do projeto "
-            "(SUPABASE_URL e SUPABASE_KEY)."
+            "Por favor, verifique seu arquivo .env local ou secrets no Streamlit Cloud."
         )
 
     return create_client(url, key)
