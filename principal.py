@@ -1049,18 +1049,18 @@ def render():
             operacoes_supabase = []
 
         if operacoes_supabase:
-         cols = st.columns([1, 2, 1])
-         with cols[1]:  # coluna do meio
-            st.markdown("### 🔘 Minhas Operações Salvas")
-            for operacao in operacoes_supabase:
-              
-                resumo = (
-                    f"{operacao['ativo_venda']} / {operacao['ativo_compra']} | "
-                    f"{pd.to_datetime(operacao['data_operacao']).strftime('%d/%m/%Y %H:%M')}"
-                )
+                st.markdown("### 🔘 Minhas Operações Salvas")
+                cols_buttons = st.columns(4)
+                for idx, operacao in enumerate(operacoes_supabase):
+                    resumo = (
+                        f"{operacao['ativo_venda']} / {operacao['ativo_compra']} | "
+                        f"{pd.to_datetime(operacao['data_operacao']).strftime('%d/%m/%Y %H:%M')}"
+                    )
+                    col = cols_buttons[idx % 4]
+                    with col:
+                        if st.button(resumo, key=f"botao_op_{operacao['id']}"):
+                            st.session_state["operacao_carregada"] = operacao
 
-                if st.button(resumo, key=f"botao_op_{operacao['id']}"):
-                    st.session_state["operacao_carregada"] = operacao
         else:
             st.info("Nenhuma operação salva encontrada.")
 
@@ -1154,6 +1154,7 @@ def render():
                 cor_delta = "off"
 
             # Layout centralizado
+            st.markdown("---")
             st.markdown("### 💰 Saldo Final Consolidado")
             col_esq, col_centro, col_dir = st.columns([1, 1, 1])
 
@@ -1164,6 +1165,17 @@ def render():
                     delta=delta_formatado,
                     delta_color=cor_delta
                 )
+            st.markdown("---")
+            plt.figure(figsize=(10, 3))
+            plt.plot(zscore_series, label="Z-Score")
+            plt.axhline(0, color='black', linestyle='--')
+            plt.axhline(2, color='red', linestyle='--')
+            plt.axhline(-2, color='green', linestyle='--')
+            plt.axhline(3, color='orange', linestyle='--')
+            plt.axhline(-3, color='orange', linestyle='--')
+            plt.legend()
+            plt.title(f"Z-Score: {ativo_venda} / {ativo_compra}")
+            st.pyplot(plt)
 
             # === Tabela Consolidada ===
             st.markdown("---")
@@ -1210,21 +1222,6 @@ def render():
                 }
             ]))
             st.markdown("---")
-            # st.markdown("### 💰 Saldo Final Consolidado")
-            # col_esq, col_centro, col_dir = st.columns([1, 1, 1])
-            # with col_centro:
-            #     cor_delta = "normal"
-            #     if saldo_final > 0:
-            #         cor_delta = "inverse"
-            #     elif saldo_final < 0:
-            #         cor_delta = "off"
-
-            #     st.metric(
-            #         label="Resultado Total",
-            #         value=f"R$ {abs(saldo_final):.2f}",
-            #         delta=f"{'+' if saldo_final > 0 else '-' if saldo_final < 0 else ''} R$ {abs(saldo_final):.2f}",
-            #         delta_color=cor_delta
-            #     )
             # --- Comparativo entre valores salvos e valores atuais ---
             st.markdown("### 🧮 Comparativo de Resultados")
 
@@ -1278,16 +1275,6 @@ def render():
             st.markdown("### 📈 Análise Gráfica da Operação")
             st.markdown(f"#### {ativo_venda} vs {ativo_compra} ({data_operacao.date()})")
 
-            plt.figure(figsize=(10, 3))
-            plt.plot(zscore_series, label="Z-Score")
-            plt.axhline(0, color='black', linestyle='--')
-            plt.axhline(2, color='red', linestyle='--')
-            plt.axhline(-2, color='green', linestyle='--')
-            plt.axhline(3, color='orange', linestyle='--')
-            plt.axhline(-3, color='orange', linestyle='--')
-            plt.legend()
-            plt.title(f"Z-Score: {ativo_venda} / {ativo_compra}")
-            st.pyplot(plt)
 
             plt.figure(figsize=(10, 3))
             plt.plot(serie_venda / serie_venda.iloc[0], label=ativo_venda)
@@ -1324,10 +1311,6 @@ def render():
 
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
-                # --- Final da análise ---
-                st.markdown("---")
-                st.markdown("### 🛑 Encerrar Operação")
-
                 col1, col2, col3 = st.columns([1, 2, 1])
                 with col2:
                     if st.button("🛑 Encerrar Operação", type="primary"):
