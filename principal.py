@@ -6,7 +6,7 @@ import yfinance as yf
 import base64
 import os
 import plotly.graph_objects as go
-# from datetime import datetime, timedelta
+import requests
 from datetime import datetime, time as dt_time
 from PIL import Image
 from statsmodels.tsa.stattools import coint
@@ -22,7 +22,7 @@ import mplfinance as mpf
 from io import BytesIO
 from pathlib import Path
 from streamlit_extras.switch_page_button import switch_page
-
+import investpy
 
 # Função para carregar o ícone
 def carregar_icone(ticker):
@@ -372,7 +372,50 @@ def format_metric(value, default="N/A", format_str="{:.2f}"):
     if pd.isna(value):
         return default
     return format_str.format(value)
+def fetch_from_yfinance(ticker, period):
+    try:
+        df = yf.download(ticker, period=period, threads=False, progress=False)['Close']
+        if not df.empty:
+            return df
+    except Exception as e:
+        print(f"[yfinance] {ticker} falhou: {e}")
+    return None
 
+def fetch_from_brapi(ticker, period):
+    try:
+        url = f"https://brapi.dev/api/quote/{ticker.replace('.SA','')}?range={period}&interval=1d"
+        r = requests.get(url)
+        if r.ok:
+            hist = r.json()['results'][0]['historicalDataPrice']
+            series = pd.Series({
+                pd.to_datetime(p["date"], unit='s').strftime('%Y-%m-%d'): p["close"]
+                for p in hist if p.get("close") is not None
+            })
+            return series
+    except Exception as e:
+        print(f"[brapi] {ticker} falhou: {e}")
+    return None
+
+def fetch_from_investpy(ticker):
+    try:
+       
+        df = investpy.get_stock_historical_data(
+            stock=ticker.replace('.SA',''),
+            country='brazil',
+            from_date='01/01/2023',
+            to_date='01/05/2024'
+        )
+        return df['Close']
+    except Exception as e:
+        print(f"[investpy] {ticker} falhou: {e}")
+    return None
+
+def fetch_cotacao_fallback(ticker, period="200d"):
+    for fetcher in [fetch_from_yfinance, fetch_from_brapi, fetch_from_investpy]:
+        result = fetcher(ticker, period) if fetcher != fetch_from_investpy else fetcher(ticker)
+        if result is not None and not result.empty:
+            return result
+    return pd.Series(name=ticker.replace(".SA", ""))
 
 
 
@@ -519,7 +562,6 @@ def render():
                 num_periodos = st.number_input(
                     "Número de Períodos (em dias):", min_value=1, max_value=365, value=200, step=1
                 )
-
                 if st.button("📥 Baixar Cotações"):
                     if selecionadas:
                         tickers_yahoo = [f"{ticker}.SA" if not ticker.endswith(".SA") else ticker for ticker in selecionadas]
@@ -529,13 +571,14 @@ def render():
                         status_text = st.empty()
 
                         for idx, ticker in enumerate(tickers_yahoo):
-                            try:
-                                status_text.text(f"Baixando cotações para {ticker}...")
-                                dados = yf.download(ticker, period=f"{num_periodos}d", threads=False)['Close']
+                            status_text.text(f"Buscando cotações para {ticker}...")
+                            dados = fetch_cotacao_fallback(ticker, f"{num_periodos}d")
+
+                            if not dados.empty:
                                 dados.name = ticker.replace(".SA", "")
                                 new_cotacoes = pd.concat([new_cotacoes, dados], axis=1)
-                            except Exception as e:
-                                st.error(f"Erro ao buscar cotações para {ticker}: {e}")
+                            else:
+                                st.warning(f"Nenhuma cotação encontrada para {ticker}")
 
                             progress_bar.progress((idx + 1) / len(tickers_yahoo))
 
@@ -553,7 +596,8 @@ def render():
                         else:
                             st.warning("Nenhuma cotação foi encontrada para os tickers selecionados.")
 
-        # === 📈 Carregar Cotações ===
+
+                        # === 📈 Carregar Cotações ===
         with aba_cotacoes[1]:
 
             nova_acao = st.text_input("Digite o ticker da ação (ex: PETR4)")
