@@ -531,7 +531,7 @@ def render():
                         for idx, ticker in enumerate(tickers_yahoo):
                             try:
                                 status_text.text(f"Baixando cotações para {ticker}...")
-                                dados = yf.download(ticker, period=f"{num_periodos}d")['Close']
+                                dados = yf.download(ticker, period=f"{num_periodos}d", threads=False)['Close']
                                 dados.name = ticker.replace(".SA", "")
                                 new_cotacoes = pd.concat([new_cotacoes, dados], axis=1)
                             except Exception as e:
