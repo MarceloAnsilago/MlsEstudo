@@ -17,12 +17,11 @@ import matplotlib.pyplot as plt
 from plotly.subplots import make_subplots
 from matplotlib.ticker import MaxNLocator
 from sklearn.linear_model import LinearRegression
-import time
 import mplfinance as mpf
 from io import BytesIO
 from pathlib import Path
 from streamlit_extras.switch_page_button import switch_page
-import investpy
+
 
 # Função para carregar o ícone
 def carregar_icone(ticker):
