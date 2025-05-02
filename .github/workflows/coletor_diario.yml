@@ -1,9 +1,11 @@
 name: Coletar Cotações Diariamente
 
 on:
+  workflow_dispatch:  # permite rodar manualmente no GitHub
   schedule:
-    - cron: '0 10 * * *'  # 🕙 roda todo dia às 10:00 UTC (~07:00 no Brasil)
-  workflow_dispatch:      # permite execução manual no GitHub
+    - cron: '0 12 * * *'  # 09:00 BRT
+    - cron: '0 15 * * *'  # 12:00 BRT
+    - cron: '0 18 * * *'  # 15:00 BRT
 
 jobs:
   run-script:
