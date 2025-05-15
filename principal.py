@@ -6,7 +6,7 @@ import yfinance as yf
 import base64
 import os
 import plotly.graph_objects as go
-import requests
+from utils.supabase_client import get_supabase_client
 from datetime import datetime, time as dt_time
 from PIL import Image
 from statsmodels.tsa.stattools import coint
@@ -43,6 +43,29 @@ def carregar_icone(ticker):
             return None
     else:
         return None
+def operacao_ja_existe(supabase, usuario_id, ativo1, ativo2):
+    try:
+        response = (
+            supabase.table("operacoes")
+            .select("ativo_venda, ativo_compra")
+            .eq("usuario_id", usuario_id)
+            .eq("status", "aberta")
+            .execute()
+        )
+        if not response.data:
+            return False
+
+        for op in response.data:
+            venda = op["ativo_venda"]
+            compra = op["ativo_compra"]
+
+            # Verifica par direto ou invertido
+            if {venda, compra} == {ativo1, ativo2}:
+                return True
+        return False
+    except Exception as e:
+        st.error(f"Erro ao verificar operações existentes: {e}")
+        return True  # Por segurança, bloqueia operação se falhar
 
 
 def plot_candlestick_e_volume(serie_preco, nome_ativo):
@@ -483,7 +506,8 @@ def render():
 
 
 
-    from utils.supabase_client import get_supabase_client
+  
+
 
 # ======================
 # Aba de Cotações
@@ -943,38 +967,41 @@ def render():
                     # if st.button("Salvar Operação como Excel"):
                     col_btn1, col_btn2 = st.columns(2)
 
-                    
                     with col_btn1:
                         if st.button("🚀 Iniciar Operação"):
                             supabase = get_supabase_client()
                             usuario_id = st.session_state["usuario"]["id"]
 
-                            data = {
-                                "usuario_id": usuario_id,
-                                "data_operacao": datetime.now().isoformat(),
-                                "ativo_venda": stock_to_sell,
-                                "ativo_compra": stock_to_buy,
-                                "preco_venda": float(sell_price),
-                                "preco_compra": float(buy_price),
-                                "quantidade_venda": int(venda_quantidade),
-                                "quantidade_compra": int(compra_quantidade),
-                                "resultado_total": float(resultado_total),
-                                "zscore": float(zscores[pairs.index(pair_selected)]),
-                                "p_value": float(pvalues[pairs.index(pair_selected)]),
-                                "hurst": float(hursts[pairs.index(pair_selected)]),
-                                "beta": float(beta_rotations[pairs.index(pair_selected)]),
-                                "half_life": float(half_lives[pairs.index(pair_selected)]),
-                                "status": "aberta"
-                            }
+                            # 🛑 Verifica se já existe operação aberta com este par (ou invertido)
+                            if operacao_ja_existe(supabase, usuario_id, stock_to_sell, stock_to_buy):
+                                st.warning("⚠️ Já existe uma operação aberta com esse par ou sua inversão.")
+                            else:
+                                data = {
+                                    "usuario_id": usuario_id,
+                                    "data_operacao": datetime.now().isoformat(),
+                                    "ativo_venda": stock_to_sell,
+                                    "ativo_compra": stock_to_buy,
+                                    "preco_venda": float(sell_price),
+                                    "preco_compra": float(buy_price),
+                                    "quantidade_venda": int(venda_quantidade),
+                                    "quantidade_compra": int(compra_quantidade),
+                                    "resultado_total": float(resultado_total),
+                                    "zscore": float(zscores[pairs.index(pair_selected)]),
+                                    "p_value": float(pvalues[pairs.index(pair_selected)]),
+                                    "hurst": float(hursts[pairs.index(pair_selected)]),
+                                    "beta": float(beta_rotations[pairs.index(pair_selected)]),
+                                    "half_life": float(half_lives[pairs.index(pair_selected)]),
+                                    "status": "aberta"
+                                }
 
-                            try:
-                                response = supabase.table("operacoes").insert(data).execute()
-                                if response.data:
-                                    st.success("✅ Operação registrada com sucesso no Supabase!")
-                                else:
-                                    st.warning("⚠️ A operação foi enviada, mas sem retorno de dados.")
-                            except Exception as e:
-                                st.error(f"Erro ao inserir operação no Supabase: {e}")
+                                try:
+                                    response = supabase.table("operacoes").insert(data).execute()
+                                    if response.data:
+                                        st.success("✅ Operação registrada com sucesso no Supabase!")
+                                    else:
+                                        st.warning("⚠️ A operação foi enviada, mas sem retorno de dados.")
+                                except Exception as e:
+                                    st.error(f"Erro ao inserir operação no Supabase: {e}")
 
 
                     with col_btn2:
