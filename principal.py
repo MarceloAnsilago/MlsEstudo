@@ -1389,14 +1389,18 @@ def render():
                             st.error(f"Erro ao encerrar operação: {e}")
 
 
-                    
+        
     if selected == "Encerradas":
         st.title("📁 Operações Encerradas")
 
         supabase = get_supabase_client()
-        usuario_id = st.session_state["usuario"]["id"]
+        usuario = st.session_state.get("usuario")
+        if not usuario:
+            st.error("Sessão expirada. Por favor, faça login novamente.")
+            st.stop()
+        usuario_id = usuario["id"]
 
-        # --- Buscar datas mínima e máxima disponíveis para esse usuário ---
+        # Buscar datas mínima e máxima disponíveis
         try:
             response = supabase.table("operacoes") \
                 .select("data_operacao") \
@@ -1407,17 +1411,19 @@ def render():
             datas = [pd.to_datetime(item["data_operacao"]) for item in response.data]
             data_min = min(datas) if datas else datetime.today()
             data_max = max(datas) if datas else datetime.today()
-
         except Exception as e:
             st.error(f"Erro ao buscar datas: {e}")
             data_min = data_max = datetime.today()
 
-        # --- Filtros de data ---
-        col1, col2 = st.columns(2)
-        with col1:
-            data_inicio = st.date_input("De", value=data_min)
-        with col2:
-            data_fim = st.date_input("Até", value=data_max)
+        # Checkbox: usar filtro por data
+        usar_data = st.checkbox("📅 Usar filtro por data")
+
+        if usar_data:
+            col1, col2 = st.columns(2)
+            with col1:
+                data_inicio = st.date_input("De", value=data_min, min_value=data_min, max_value=data_max)
+            with col2:
+                data_fim = st.date_input("Até", value=data_max, min_value=data_min, max_value=data_max)
 
         # Botão centralizado
         st.markdown(" ")
@@ -1425,55 +1431,62 @@ def render():
         with col_mid:
             buscar = st.button("🔍 Buscar Operações", use_container_width=True)
 
-        # Lógica de busca
         if buscar:
             with st.spinner("🔎 Buscando operações encerradas..."):
                 try:
-                    inicio_datetime = datetime.combine(data_inicio, dt_time.min)
-                    fim_datetime = datetime.combine(data_fim, dt_time.max)
+                    if usar_data:
+                        inicio_datetime = datetime.combine(data_inicio, dt_time.min)
+                        fim_datetime = datetime.combine(data_fim, dt_time.max)
 
+                        response = (
+                            supabase.table("operacoes")
+                            .select("*")
+                            .eq("usuario_id", usuario_id)
+                            .eq("status", "encerrado")
+                            .gte("data_operacao", inicio_datetime.isoformat())
+                            .lte("data_operacao", fim_datetime.isoformat())
+                            .order("data_operacao", desc=True)
+                            .execute()
+                        )
+                    else:
+                        response = (
+                            supabase.table("operacoes")
+                            .select("*")
+                            .eq("usuario_id", usuario_id)
+                            .eq("status", "encerrado")
+                            .order("data_operacao", desc=True)
+                            .execute()
+                        )
 
-                    response = (
-                        supabase.table("operacoes")
-                        .select("*")
-                        .eq("usuario_id", usuario_id)
-                        .eq("status", "encerrado")  # status deve estar exatamente assim
-                        .gte("data_operacao", inicio_datetime.isoformat())
-                        .lte("data_operacao", fim_datetime.isoformat())
-                        .order("data_operacao", desc=True)
-                        .execute()
-                    )
                     encerradas = response.data
                 except Exception as e:
                     st.error(f"Erro ao buscar operações encerradas: {e}")
                     encerradas = []
 
-         
                 if encerradas:
                     st.markdown("### 📄 Resultados das Operações Encerradas")
 
-                    df_resultados = pd.DataFrame(encerradas)
-                    df_resultados["data_operacao"] = pd.to_datetime(df_resultados["data_operacao"]).dt.strftime("%d/%m/%Y")
+                    df = pd.DataFrame(encerradas)
+                    df["data_operacao"] = pd.to_datetime(df["data_operacao"]).dt.strftime("%d/%m/%Y")
 
-                    # Totais financeiros com base nos preços de encerramento
-                    df_resultados["total_venda"] = (
-                    pd.to_numeric(df_resultados["preco_encerramento_venda"], errors="coerce") *
-                    pd.to_numeric(df_resultados["quantidade_venda"], errors="coerce")
-                   ).round(2)
+                    df["total_venda"] = (
+                        pd.to_numeric(df["preco_encerramento_venda"], errors="coerce") *
+                        pd.to_numeric(df["quantidade_venda"], errors="coerce")
+                    ).round(2)
 
-                    df_resultados["total_compra"] = (
-                    pd.to_numeric(df_resultados["preco_encerramento_compra"], errors="coerce") *
-                    pd.to_numeric(df_resultados["quantidade_compra"], errors="coerce")
-                     ).round(2)
+                    df["total_compra"] = (
+                        pd.to_numeric(df["preco_encerramento_compra"], errors="coerce") *
+                        pd.to_numeric(df["quantidade_compra"], errors="coerce")
+                    ).round(2)
 
+                    df["retorno_pct"] = (
+                        (df["resultado_total"] / df["total_venda"]) * 100
+                    ).round(2)
 
-                    # Retorno percentual sobre o valor vendido
-                    df_resultados["retorno_pct"] = (
-                        (df_resultados["resultado_total"] / df_resultados["total_venda"]) * 100
-                         ).round(2)
+                    total_venda_final = df["total_venda"].sum()
+                    total_compra_final = df["total_compra"].sum()
 
-                    # Renomear colunas
-                    df_resultados.rename(columns={
+                    df.rename(columns={
                         "data_operacao": "Data",
                         "ativo_venda": "Ativo Vendido",
                         "quantidade_venda": "Qtd Venda",
@@ -1485,90 +1498,91 @@ def render():
                         "retorno_pct": "% Lucro/Prejuízo",
                     }, inplace=True)
 
-                    # Exibir operação por operação
-                    
-                    for _, row in df_resultados.iterrows():
-                        st.markdown("### 📌 Operação")
+         
+                    for _, row in df.iterrows():
+                        # Ícone fixo e seguro para todas as operações
+                        with st.expander(f"📌 {row['Data']} — {row['Ativo Vendido']} x {row['Ativo Comprado']}"):
+                            data_abertura = pd.to_datetime(row["Data"]).tz_localize(None)
+                            data_encerramento_raw = row.get("data_encerramento", None)
 
-                        # Converter as datas de string para datetime
-                        data_abertura = pd.to_datetime(row["Data"])
-                        data_encerramento = pd.to_datetime(row.get("data_encerramento", None))
+                            if pd.notnull(data_encerramento_raw):
+                                data_encerramento = pd.to_datetime(data_encerramento_raw).tz_localize(None)
+                                duracao_dias = (data_encerramento - data_abertura).days
+                            else:
+                                data_encerramento = None
+                                duracao_dias = "—"
 
-                        # Calcular a duração em dias, se houver data de encerramento
-                        if pd.notnull(data_encerramento):
-                            duracao_dias = (data_encerramento.tz_localize(None) - data_abertura.tz_localize(None)).days
-                        else:
-                            duracao_dias = "—"
+                            col_d1, col_d2, col_d3 = st.columns(3)
+                            with col_d1:
+                                st.write(f"📅 **Data de Abertura:** `{data_abertura.strftime('%d/%m/%Y')}`")
+                            with col_d2:
+                                st.write(f"🗓️ **Encerramento:** `{data_encerramento.strftime('%d/%m/%Y') if data_encerramento else '—'}`")
+                            with col_d3:
+                                st.write(f"⏳ **Duração:** `{duracao_dias}` dias")
 
-                        # --- Cabeçalho informativo da operação ---
-                        st.markdown("### 🕒 Período da Operação")
-                        col_d1, col_d2, col_d3 = st.columns(3)
-                        with col_d1:
-                            st.write(f"📅 **Data de Abertura:** `{data_abertura.strftime('%d/%m/%Y')}`")
-                        with col_d2:
-                            st.write(f"📆 **Data de Encerramento:** `{data_encerramento.strftime('%d/%m/%Y') if pd.notnull(data_encerramento) else '—'}`")
-                        with col_d3:
-                            st.write(f"⏳ **Duração:** `{duracao_dias}` dias")
-                                               
+                            col1, col2, col3, col4 = st.columns(4)
 
-                        col1, col2, col3, col4 = st.columns(4)
+                            # --- COLUNA 1: Venda ---
+                            with col1:
+                                st.markdown(f"**💰 Venda:** `{row['Ativo Vendido']}`")
+                                st.write(f"- Quantidade: `{row['Qtd Venda']}`")
+                                st.write(f"- Preço Inicial: `R$ {row['preco_venda']:.2f}`")
+                                st.write(f"- Encerramento: `R$ {row['preco_encerramento_venda']:.2f}`")
 
-                        # --- COLUNA 1: Venda ---
-                        with col1:
-                            st.markdown(f"**💰 Venda:** `{row['Ativo Vendido']}`")
-                            st.write(f"- Quantidade: `{row['Qtd Venda']}`")
-                            st.write(f"- Preço Inicial: `R$ {row['preco_venda']:.2f}`")
-                            st.write(f"- Encerramento: `R$ {row['preco_encerramento_venda']:.2f}`")
-                            st.write(f"- Total Venda Inicial: `R$ {(row['preco_venda'] * row['Qtd Venda']):,.2f}`")
-                            st.write(f"- Total Venda Final: `R$ {row['Total Venda (R$)']:,.2f}`")
+                                total_ini_venda = row["preco_venda"] * row["Qtd Venda"]
+                                st.write(f"- Total Inicial: `R$ {total_ini_venda:,.2f}`")
+                                st.write(f"- Total Final: `R$ {row['Total Venda (R$)']:,.2f}`")
 
-                        # --- COLUNA 2: Compra ---
-                        with col2:
-                            st.markdown(f"**🛒 Compra:** `{row['Ativo Comprado']}`")
-                            st.write(f"- Quantidade: `{row['Qtd Compra']}`")
-                            st.write(f"- Preço Inicial: `R$ {row['preco_compra']:.2f}`")
-                            st.write(f"- Encerramento: `R$ {row['preco_encerramento_compra']:.2f}`")
-                            st.write(f"- Total Compra Inicial: `R$ {(row['preco_compra'] * row['Qtd Compra']):,.2f}`")
-                            st.write(f"- Total Compra Final: `R$ {row['Total Compra (R$)']:,.2f}`")
+                                resultado_venda = (row["preco_venda"] - row["preco_encerramento_venda"]) * row["Qtd Venda"]
+                                simbolo_v = "✅" if resultado_venda > 0 else "❌" if resultado_venda < 0 else "➖"
+                                st.write(f"**Resultado Venda:** {simbolo_v} `R$ {resultado_venda:,.2f}`")
 
-                        # --- COLUNA 3: Cálculos e Saldo Inicial ---
-                        with col3:
-                            total_venda_inicial = row["preco_venda"] * row["Qtd Venda"]
-                            total_compra_inicial = row["preco_compra"] * row["Qtd Compra"]
-                            saldo_inicial = total_venda_inicial - total_compra_inicial
-                            resultado = row["Resultado (R$)"]
-                            retorno = row["% Lucro/Prejuízo"]
+                            # --- COLUNA 2: Compra ---
+                            with col2:
+                                st.markdown(f"**🛒 Compra:** `{row['Ativo Comprado']}`")
+                                st.write(f"- Quantidade: `{row['Qtd Compra']}`")
+                                st.write(f"- Preço Inicial: `R$ {row['preco_compra']:.2f}`")
+                                st.write(f"- Encerramento: `R$ {row['preco_encerramento_compra']:.2f}`")
 
-                            st.markdown("**📊 Saldo Inicial:**")
-                            st.metric(
-                                label="Saldo Inicial",
-                                value=f"R$ {saldo_inicial:,.2f}",
-                                delta=f"{'+' if saldo_inicial > 0 else '-' if saldo_inicial < 0 else ''}R$ {abs(saldo_inicial):,.2f}",
-                                delta_color="inverse" if saldo_inicial > 0 else "off"
-                            )
+                                total_ini_compra = row["preco_compra"] * row["Qtd Compra"]
+                                st.write(f"- Total Inicial: `R$ {total_ini_compra:,.2f}`")
+                                st.write(f"- Total Final: `R$ {row['Total Compra (R$)']:,.2f}`")
 
-                            st.markdown("**📈 Resultado Final:**")
-                            st.metric(
-                                "Resultado Final",
-                                value=f"R$ {abs(resultado):,.2f}",
-                                delta=f"{'+' if resultado > 0 else '-' if resultado < 0 else ''}R$ {abs(resultado):,.2f}",
-                                delta_color="inverse" if resultado > 0 else "off"
-                            )
+                                resultado_compra = (row["preco_encerramento_compra"] - row["preco_compra"]) * row["Qtd Compra"]
+                                simbolo_c = "✅" if resultado_compra > 0 else "❌" if resultado_compra < 0 else "➖"
+                                st.write(f"**Resultado Compra:** {simbolo_c} `R$ {resultado_compra:,.2f}`")
 
-                                               
-                        with col4:
-                            retorno = row["% Lucro/Prejuízo"]
-                            cor = "🟢" if retorno > 0 else "🔴" if retorno < 0 else "⚪"
-                            st.markdown("**📉 Lucro / Prejuízo (%):**")
-                            st.metric(
-                                label="% Lucro/Prejuízo",
-                                value=f"{retorno:.2f}%",
-                                delta=f"{'+' if retorno > 0 else '-' if retorno < 0 else ''}{abs(retorno):.2f}%",
-                                delta_color="inverse" if retorno > 0 else "off"
-                            )   
+                            # --- COLUNA 3: Valor Inicial e Resultado Total ---
+                            with col3:
+                                valor_recebido_venda = row["preco_venda"] * row["Qtd Venda"]
+                                valor_pago_compra = row["preco_compra"] * row["Qtd Compra"]
+                                valor_inicial_liquido = valor_recebido_venda - valor_pago_compra
 
+                                st.metric("Valor Inicial (R$)", f"R$ {valor_inicial_liquido:,.2f}",
+                                        delta=f"{'+' if valor_inicial_liquido > 0 else '-' if valor_inicial_liquido < 0 else ''}R$ {abs(valor_inicial_liquido):,.2f}",
+                                        delta_color="inverse" if valor_inicial_liquido > 0 else "off")
 
-                        st.markdown("---")
+                                resultado = resultado_venda + resultado_compra
+                                st.metric("Resultado Final", f"R$ {abs(resultado):,.2f}",
+                                        delta=f"{'+' if resultado > 0 else '-' if resultado < 0 else ''}R$ {abs(resultado):,.2f}",
+                                        delta_color="inverse" if resultado > 0 else "off")
 
+                            # --- COLUNA 4: % ao dia sobre valor da venda ---
+                            with col4:
+                                if isinstance(duracao_dias, int) and duracao_dias > 0 and valor_recebido_venda > 0:
+                                    retorno_pct_dia = ((resultado / valor_recebido_venda) / duracao_dias) * 100
+                                else:
+                                    retorno_pct_dia = 0
+
+                                st.metric("% Lucro/Prejuízo ao dia", f"{retorno_pct_dia:.2f}%",
+                                        delta=f"{'+' if retorno_pct_dia > 0 else '-' if retorno_pct_dia < 0 else ''}{abs(retorno_pct_dia):.2f}%",
+                                        delta_color="inverse" if retorno_pct_dia > 0 else "off")
+
+                    st.markdown("## 📊 Totais Gerais")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("🧾 Total Final de Vendas", f"R$ {total_venda_final:,.2f}")
+                    with col2:
+                        st.metric("🛒 Total Final de Compras", f"R$ {total_compra_final:,.2f}")
                 else:
                     st.warning("⚠️ Nenhuma operação encerrada encontrada nesse período.")
