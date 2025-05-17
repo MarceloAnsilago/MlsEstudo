@@ -21,7 +21,7 @@ import mplfinance as mpf
 from io import BytesIO
 from pathlib import Path
 from streamlit_extras.switch_page_button import switch_page
-
+import matplotlib.pyplot as plt
 
 # Função para carregar o ícone
 def carregar_icone(ticker):
@@ -658,13 +658,22 @@ def render():
                     cotacoes_pivot, zscore_threshold_upper, zscore_threshold_lower
                 )
 
+      
             if pairs:
+                supabase = get_supabase_client()
+                usuario_id = st.session_state["usuario"]["id"]
+
                 for idx, (pair, zscore, pvalue, hurst, beta, half_life) in enumerate(zip(pairs, zscores, pvalues, hursts, beta_rotations, half_lives)):
                     par_str = f"{pair[0]} - {pair[1]}"
                     metricas_str = f"Z-Score: {zscore:.2f} | P-Value: {pvalue:.4f} | Hurst: {hurst:.4f} | Beta: {beta:.4f} | Half-Life: {half_life:.2f}"
-                    
+
                     if st.button(f"{par_str} | {metricas_str}", key=f"btn_{idx}"):
-                        st.session_state['par_selecionado'] = pair
+                        if operacao_ja_existe(supabase, usuario_id, pair[0], pair[1]):
+                            st.warning("⚠️ Já existe uma operação **aberta** com esse par ou sua inversão.")
+                            st.toast("⚠️ Já existe uma operação aberta com esse par ou sua inversão.")
+                            st.session_state.pop("par_selecionado", None)
+                        else:
+                            st.session_state['par_selecionado'] = pair
 
                 if 'par_selecionado' in st.session_state:
                     pair_selected = st.session_state['par_selecionado']
@@ -1499,10 +1508,11 @@ def render():
                     }, inplace=True)
 
          
+                 
                     for _, row in df.iterrows():
-                        # Ícone fixo e seguro para todas as operações
                         with st.expander(f"📌 {row['Data']} — {row['Ativo Vendido']} x {row['Ativo Comprado']}"):
-                            data_abertura = pd.to_datetime(row["Data"]).tz_localize(None)
+                            # Corrigir data com dayfirst=True
+                            data_abertura = pd.to_datetime(row["Data"], dayfirst=True).tz_localize(None)
                             data_encerramento_raw = row.get("data_encerramento", None)
 
                             if pd.notnull(data_encerramento_raw):
@@ -1563,11 +1573,13 @@ def render():
                                         delta_color="inverse" if valor_inicial_liquido > 0 else "off")
 
                                 resultado = resultado_venda + resultado_compra
-                                st.metric("Resultado Final", f"R$ {abs(resultado):,.2f}",
+                                valor_formatado = f"-R$ {abs(resultado):,.2f}" if resultado < 0 else f"R$ {resultado:,.2f}"
+
+                                st.metric("Resultado Final", valor_formatado,
                                         delta=f"{'+' if resultado > 0 else '-' if resultado < 0 else ''}R$ {abs(resultado):,.2f}",
                                         delta_color="inverse" if resultado > 0 else "off")
 
-                            # --- COLUNA 4: % ao dia sobre valor da venda ---
+                            # --- COLUNA 4: % ao dia ---
                             with col4:
                                 if isinstance(duracao_dias, int) and duracao_dias > 0 and valor_recebido_venda > 0:
                                     retorno_pct_dia = ((resultado / valor_recebido_venda) / duracao_dias) * 100
@@ -1586,3 +1598,39 @@ def render():
                         st.metric("🛒 Total Final de Compras", f"R$ {total_compra_final:,.2f}")
                 else:
                     st.warning("⚠️ Nenhuma operação encerrada encontrada nesse período.")
+
+
+                try:
+                    df["Resultado (R$)"] = pd.to_numeric(df["Resultado (R$)"], errors="coerce")
+                    acertos = sum(df["Resultado (R$)"] > 0)
+                    erros = sum(df["Resultado (R$)"] < 0)
+
+                    if acertos + erros == 0:
+                        st.info("Nenhum dado de acerto/erro disponível para exibir o gráfico.")
+                    else:
+                        labels = ["Acertos", "Erros"]
+                        sizes = [acertos, erros]
+                        colors = ["#00cc99", "#ff4d4f"]
+
+                        # Gráfico mais compacto
+                        fig, ax = plt.subplots(figsize=(1.5, 1.5))
+                        wedges, texts, autotexts = ax.pie(
+                            sizes,
+                            labels=None,
+                            autopct="%1.1f%%",
+                            startangle=90,
+                            colors=colors,
+                            wedgeprops=dict(width=0.35)
+                        )
+
+                        ax.axis("equal")
+                        plt.setp(autotexts, size=7, weight="bold", color="black")
+
+                        # Legenda com espaçamento menor
+                        ax.legend(wedges, labels, title="Taxa de Acerto", loc="center left", bbox_to_anchor=(1.05, 0.5), fontsize=8, title_fontsize=9)
+
+                        st.markdown("### 🎯 Taxa de Acerto")
+                        st.pyplot(fig)
+
+                except Exception as e:
+                    st.error(f"Erro ao gerar gráfico de taxa de acerto: {e}")
