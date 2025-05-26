@@ -1258,7 +1258,8 @@ def render():
                     "Quantidade": quantidade_venda,
                     "Preço Inicial": f"R$ {preco_venda:.2f}",
                     "Preço Atual": f"R$ {preco_atual_venda:.2f}",
-                    "Lucro/Prejuízo": f"R$ {lucro_venda:.2f}"
+                    "Lucro/Prejuízo": f"R$ {lucro_venda:.2f}",
+                    "Variação (%)": f"{((preco_atual_venda - preco_venda) / preco_venda) * 100:.2f}%"
                 },
                 {
                     "Ativo": ativo_compra,
@@ -1266,7 +1267,8 @@ def render():
                     "Quantidade": quantidade_compra,
                     "Preço Inicial": f"R$ {preco_compra:.2f}",
                     "Preço Atual": f"R$ {preco_atual_compra:.2f}",
-                    "Lucro/Prejuízo": f"R$ {lucro_compra:.2f}"
+                    "Lucro/Prejuízo": f"R$ {lucro_compra:.2f}",
+                    "Variação (%)": f"{((preco_atual_compra - preco_compra) / preco_compra) * 100:.2f}%"
                 }
             ]))
             st.markdown("---")
