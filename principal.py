@@ -1512,25 +1512,33 @@ def render():
 
          
                  
+                   
                     for _, row in df.iterrows():
                         with st.expander(f"📌 {row['Data']} — {row['Ativo Vendido']} x {row['Ativo Comprado']}"):
-                            # Corrigir data com dayfirst=True
-                            data_abertura = pd.to_datetime(row["Data"], dayfirst=True).tz_localize(None)
+                            # Conversão segura das datas
+                            try:
+                                data_abertura = pd.to_datetime(row["Data"], dayfirst=True, errors="coerce")
+                                abertura_fmt = data_abertura.strftime('%d/%m/%Y') if pd.notnull(data_abertura) else "—"
+                            except:
+                                data_abertura = None
+                                abertura_fmt = "—"
+
                             data_encerramento_raw = row.get("data_encerramento", None)
-
-                            if pd.notnull(data_encerramento_raw):
-                                data_encerramento = pd.to_datetime(data_encerramento_raw).tz_localize(None)
-                                duracao_dias = (data_encerramento - data_abertura).days
-                          
-                            else:
+                            try:
+                                data_encerramento = pd.to_datetime(data_encerramento_raw, errors="coerce")
+                                encerramento_fmt = data_encerramento.strftime('%d/%m/%Y') if pd.notnull(data_encerramento) else "—"
+                            except:
                                 data_encerramento = None
-                                duracao_dias = "—"
+                                encerramento_fmt = "—"
 
+                            duracao_dias = (data_encerramento - data_abertura).days if pd.notnull(data_abertura) and pd.notnull(data_encerramento) else "—"
+
+                            # Exibição das datas
                             col_d1, col_d2, col_d3 = st.columns(3)
                             with col_d1:
-                                st.write(f"📅 **Data de Abertura:** `{data_abertura.strftime('%d/%m/%Y')}`")
+                                st.write(f"📅 **Data de Abertura:** `{abertura_fmt}`")
                             with col_d2:
-                                st.write(f"🗓️ **Encerramento:** `{data_encerramento.strftime('%d/%m/%Y') if data_encerramento else '—'}`")
+                                st.write(f"🗓️ **Encerramento:** `{encerramento_fmt}`")
                             with col_d3:
                                 st.write(f"⏳ **Duração:** `{duracao_dias}` dias")
 
