@@ -1478,7 +1478,8 @@ def render():
                     st.markdown("### 📄 Resultados das Operações Encerradas")
 
                     df = pd.DataFrame(encerradas)
-                    df["data_operacao"] = pd.to_datetime(df["data_operacao"]).dt.strftime("%d/%m/%Y")
+                    df["data_operacao"] = pd.to_datetime(df["data_operacao"], utc=True, errors="coerce").dt.tz_localize(None)
+                    df["data_operacao"] = df["data_operacao"].dt.strftime("%d/%m/%Y")
 
                     df["total_venda"] = (
                         pd.to_numeric(df["preco_encerramento_venda"], errors="coerce") *
