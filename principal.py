@@ -1511,6 +1511,7 @@ def render():
                     }, inplace=True)
 
 
+               
                 for _, row in df.iterrows():
                     with st.expander(f"📌 {row['Data']} — {row['Ativo Vendido']} x {row['Ativo Comprado']}"):
                         try:
@@ -1528,10 +1529,9 @@ def render():
                             data_encerramento = None
                             encerramento_fmt = "—"
 
-                        # ✅ Cálculo seguro da duração
-                        if pd.notnull(data_abertura) and pd.notnull(data_encerramento):
+                        try:
                             duracao_dias = (data_encerramento - data_abertura).days
-                        else:
+                        except:
                             duracao_dias = "—"
 
                         # Exibição das datas
