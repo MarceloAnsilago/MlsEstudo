@@ -1442,39 +1442,78 @@ def render():
         with col_mid:
             buscar = st.button("🔍 Buscar Operações", use_container_width=True)
 
-        if buscar:
-            with st.spinner("🔎 Buscando operações encerradas..."):
-                try:
-                    if usar_data:
-                        inicio_datetime = datetime.combine(data_inicio, dt_time.min)
-                        fim_datetime = datetime.combine(data_fim, dt_time.max)
+ 
+            if buscar:
+                with st.spinner("🔎 Buscando operações encerradas..."):
+                    try:
+                        if usar_data:
+                            inicio_datetime = datetime.combine(data_inicio, dt_time.min)
+                            fim_datetime = datetime.combine(data_fim, dt_time.max)
 
-                        response = (
-                            supabase.table("operacoes")
-                            .select("*")
-                            .eq("usuario_id", usuario_id)
-                            .eq("status", "encerrado")
-                            .gte("data_operacao", inicio_datetime.isoformat())
-                            .lte("data_operacao", fim_datetime.isoformat())
-                            .order("data_operacao", desc=True)
-                            .execute()
-                        )
-                    else:
-                        response = (
-                            supabase.table("operacoes")
-                            .select("*")
-                            .eq("usuario_id", usuario_id)
-                            .eq("status", "encerrado")
-                            .order("data_operacao", desc=True)
-                            .execute()
-                        )
+                            response = (
+                                supabase.table("operacoes")
+                                .select("*")
+                                .eq("usuario_id", usuario_id)
+                                .eq("status", "encerrado")
+                                .gte("data_operacao", inicio_datetime.isoformat())
+                                .lte("data_operacao", fim_datetime.isoformat())
+                                .order("data_operacao", desc=True)
+                                .execute()
+                            )
+                        else:
+                            response = (
+                                supabase.table("operacoes")
+                                .select("*")
+                                .eq("usuario_id", usuario_id)
+                                .eq("status", "encerrado")
+                                .order("data_operacao", desc=True)
+                                .execute()
+                            )
 
-                    encerradas = response.data
-                except Exception as e:
-                    st.error(f"Erro ao buscar operações encerradas: {e}")
-                    encerradas = []
+                        encerradas = response.data
 
-                if encerradas:
+                        # ✅ Se não houver dados, mostra aviso e interrompe a execução
+                        if not encerradas:
+                            st.warning("⚠️ Nenhuma operação encerrada encontrada nesse período.")
+                            st.stop()
+
+                    except Exception as e:
+                        st.error(f"Erro ao buscar operações encerradas: {e}")
+                        st.stop()  # ✅ Encerra a execução segura
+
+                    # ✅ Só chega aqui se houver dados
+                    df = pd.DataFrame(encerradas)
+                    df["data_operacao"] = pd.to_datetime(df["data_operacao"], utc=True, errors="coerce").dt.tz_localize(None)
+                    df["data_operacao"] = df["data_operacao"].dt.strftime("%d/%m/%Y")
+
+                    df["total_venda"] = (
+                        pd.to_numeric(df["preco_encerramento_venda"], errors="coerce") *
+                        pd.to_numeric(df["quantidade_venda"], errors="coerce")
+                    ).round(2)
+
+                    df["total_compra"] = (
+                        pd.to_numeric(df["preco_encerramento_compra"], errors="coerce") *
+                        pd.to_numeric(df["quantidade_compra"], errors="coerce")
+                    ).round(2)
+
+                    df["retorno_pct"] = (
+                        (df["resultado_total"] / df["total_venda"]) * 100
+                    ).round(2)
+
+                    total_venda_final = df["total_venda"].sum()
+                    total_compra_final = df["total_compra"].sum()
+
+                    df.rename(columns={
+                        "data_operacao": "Data",
+                        "ativo_venda": "Ativo Vendido",
+                        "quantidade_venda": "Qtd Venda",
+                        "total_venda": "Total Venda (R$)",
+                        "ativo_compra": "Ativo Comprado",
+                        "quantidade_compra": "Qtd Compra",
+                        "total_compra": "Total Compra (R$)",
+                        "resultado_total": "Resultado (R$)",
+                        "retorno_pct": "% Lucro/Prejuízo",
+                    }, inplace=True)
                     st.markdown("### 📄 Resultados das Operações Encerradas")
 
                     df = pd.DataFrame(encerradas)
@@ -1510,8 +1549,6 @@ def render():
                         "retorno_pct": "% Lucro/Prejuízo",
                     }, inplace=True)
 
-
-               
                 for _, row in df.iterrows():
                     with st.expander(f"📌 {row['Data']} — {row['Ativo Vendido']} x {row['Ativo Comprado']}"):
                         try:
@@ -1534,7 +1571,6 @@ def render():
                         except:
                             duracao_dias = "—"
 
-                        # Exibição das datas
                         col_d1, col_d2, col_d3 = st.columns(3)
                         with col_d1:
                             st.write(f"📅 **Data de Abertura:** `{abertura_fmt}`")
@@ -1545,7 +1581,6 @@ def render():
 
                         col1, col2, col3, col4 = st.columns(4)
 
-                            # --- COLUNA 1: Venda ---
                         with col1:
                             st.markdown(f"**💰 Venda:** `{row['Ativo Vendido']}`")
                             st.write(f"- Quantidade: `{row['Qtd Venda']}`")
@@ -1557,7 +1592,6 @@ def render():
                             st.write(f"- Total Inicial: `R$ {total_ini_venda:,.2f}`")
                             st.write(f"- Total Final: `R$ {total_fim_venda:,.2f}`")
 
-                            # Variação percentual na venda
                             variacao_venda_pct = ((total_fim_venda - total_ini_venda) / total_ini_venda) * 100 if total_ini_venda != 0 else 0
                             cor_venda = "green" if variacao_venda_pct >= 0 else "red"
                             st.markdown(f"<span style='color:{cor_venda}; font-weight:600;'>📈 Variação: {variacao_venda_pct:+.2f}%</span>", unsafe_allow_html=True)
@@ -1566,7 +1600,6 @@ def render():
                             simbolo_v = "✅" if resultado_venda > 0 else "❌" if resultado_venda < 0 else "➖"
                             st.write(f"**Resultado Venda:** {simbolo_v} `R$ {resultado_venda:,.2f}`")
 
-                        # --- COLUNA 2: Compra ---
                         with col2:
                             st.markdown(f"**🛒 Compra:** `{row['Ativo Comprado']}`")
                             st.write(f"- Quantidade: `{row['Qtd Compra']}`")
@@ -1578,7 +1611,6 @@ def render():
                             st.write(f"- Total Inicial: `R$ {total_ini_compra:,.2f}`")
                             st.write(f"- Total Final: `R$ {total_fim_compra:,.2f}`")
 
-                            # Variação percentual na compra
                             variacao_compra_pct = ((total_fim_compra - total_ini_compra) / total_ini_compra) * 100 if total_ini_compra != 0 else 0
                             cor_compra = "green" if variacao_compra_pct >= 0 else "red"
                             st.markdown(f"<span style='color:{cor_compra}; font-weight:600;'>📈 Variação: {variacao_compra_pct:+.2f}%</span>", unsafe_allow_html=True)
@@ -1586,92 +1618,81 @@ def render():
                             resultado_compra = (row["preco_encerramento_compra"] - row["preco_compra"]) * row["Qtd Compra"]
                             simbolo_c = "✅" if resultado_compra > 0 else "❌" if resultado_compra < 0 else "➖"
                             st.write(f"**Resultado Compra:** {simbolo_c} `R$ {resultado_compra:,.2f}`")
-                            # --- COLUNA 3: Valor Inicial e Resultado Total ---
-                            with col3:
-                                valor_recebido_venda = row["preco_venda"] * row["Qtd Venda"]
-                                valor_pago_compra = row["preco_compra"] * row["Qtd Compra"]
-                                valor_inicial_liquido = valor_recebido_venda - valor_pago_compra
 
-                                st.metric("Valor Inicial (R$)", f"R$ {valor_inicial_liquido:,.2f}",
-                                        delta=f"{'+' if valor_inicial_liquido > 0 else '-' if valor_inicial_liquido < 0 else ''}R$ {abs(valor_inicial_liquido):,.2f}",
-                                        delta_color="inverse" if valor_inicial_liquido > 0 else "off")
+                        with col3:
+                            valor_recebido_venda = row["preco_venda"] * row["Qtd Venda"]
+                            valor_pago_compra = row["preco_compra"] * row["Qtd Compra"]
+                            valor_inicial_liquido = valor_recebido_venda - valor_pago_compra
 
-                                resultado = resultado_venda + resultado_compra
-                                df.at[_, "Resultado (R$)"] = resultado  #
+                            st.metric("Valor Inicial (R$)", f"R$ {valor_inicial_liquido:,.2f}",
+                                    delta=f"{'+' if valor_inicial_liquido > 0 else '-' if valor_inicial_liquido < 0 else ''}R$ {abs(valor_inicial_liquido):,.2f}",
+                                    delta_color="inverse" if valor_inicial_liquido > 0 else "off")
 
-                                valor_formatado = f"-R$ {abs(resultado):,.2f}" if resultado < 0 else f"R$ {resultado:,.2f}"
+                            resultado = resultado_venda + resultado_compra
+                            df.at[_, "Resultado (R$)"] = resultado
 
-                                st.metric("Resultado Final", valor_formatado,
-                                        delta=f"{'+' if resultado > 0 else '-' if resultado < 0 else ''}R$ {abs(resultado):,.2f}",
-                                        delta_color="inverse" if resultado > 0 else "off")
+                            valor_formatado = f"-R$ {abs(resultado):,.2f}" if resultado < 0 else f"R$ {resultado:,.2f}"
+                            st.metric("Resultado Final", valor_formatado,
+                                    delta=f"{'+' if resultado > 0 else '-' if resultado < 0 else ''}R$ {abs(resultado):,.2f}",
+                                    delta_color="inverse" if resultado > 0 else "off")
 
-                            # --- COLUNA 4: % ao dia ---
-                           
-                            with col4:
-                                valor_inicial_liquido = total_ini_venda - total_ini_compra  # 🧮 base correta do investimento
+                        with col4:
+                            valor_inicial_liquido = total_ini_venda - total_ini_compra
+                            if isinstance(duracao_dias, int) and duracao_dias > 0 and valor_inicial_liquido != 0:
+                                retorno_pct_dia = (resultado / valor_inicial_liquido) / duracao_dias * 100
+                            else:
+                                retorno_pct_dia = 0
+                            st.metric("% Lucro/Prejuízo ao dia", f"{retorno_pct_dia:.2f}%",
+                                    delta=f"{'+' if retorno_pct_dia > 0 else '-' if retorno_pct_dia < 0 else ''}{abs(retorno_pct_dia):.2f}%",
+                                    delta_color="inverse" if retorno_pct_dia > 0 else "off")
 
-                                if isinstance(duracao_dias, int) and duracao_dias > 0 and valor_inicial_liquido != 0:
-                                    retorno_pct_dia = (resultado / valor_inicial_liquido) / duracao_dias * 100
-                                else:
-                                    retorno_pct_dia = 0
+                # 👇 TOTAIS E GRÁFICO — fora do loop
+                st.markdown("## 📊 Totais Gerais")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("🧾 Total Final de Vendas", f"R$ {total_venda_final:,.2f}")
+                with col2:
+                    st.metric("🛒 Total Final de Compras", f"R$ {total_compra_final:,.2f}")
 
-                                st.metric("% Lucro/Prejuízo ao dia", f"{retorno_pct_dia:.2f}%",
-                                        delta=f"{'+' if retorno_pct_dia > 0 else '-' if retorno_pct_dia < 0 else ''}{abs(retorno_pct_dia):.2f}%",
-                                        delta_color="inverse" if retorno_pct_dia > 0 else "off")
-                    
-                    if not df.empty:
-                        st.markdown("## 📊 Totais Gerais")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.metric("🧾 Total Final de Vendas", f"R$ {total_venda_final:,.2f}")
-                        with col2:
-                            st.metric("🛒 Total Final de Compras", f"R$ {total_compra_final:,.2f}")
+                try:
+                    df["Resultado (R$)"] = pd.to_numeric(df["Resultado (R$)"], errors="coerce").fillna(0)
+                    df["Status"] = df["Resultado (R$)"].apply(lambda x: "✅ Acerto" if x > 0 else "❌ Erro" if x < 0 else "➖ Neutro")
+
+                    acertos = (df["Resultado (R$)"] > 0).sum()
+                    erros = (df["Resultado (R$)"] < 0).sum()
+                    total_operacoes = acertos + erros
+
+                    if total_operacoes == 0:
+                        st.info("Nenhum dado de acerto/erro disponível para exibir o gráfico.")
                     else:
-                        st.warning("⚠️ Nenhuma operação encerrada encontrada nesse período.")
+                        labels = ["Acertos", "Erros"]
+                        sizes = [acertos, erros]
+                        colors = ["#00cc99", "#ff4d4f"]
 
-                    # Diagnóstico e gráfico da Taxa de Acerto
-                    try:
-                        df["Resultado (R$)"] = pd.to_numeric(df["Resultado (R$)"], errors="coerce").fillna(0)
-                        df["Status"] = df["Resultado (R$)"].apply(lambda x: "✅ Acerto" if x > 0 else "❌ Erro" if x < 0 else "➖ Neutro")
+                        def make_autopct(values):
+                            def my_autopct(pct):
+                                total = sum(values)
+                                val = int(round(pct * total / 100.0))
+                                return f"{val} ({pct:.1f}%)"
+                            return my_autopct
 
-                        acertos = (df["Resultado (R$)"] > 0).sum()
-                        erros = (df["Resultado (R$)"] < 0).sum()
-                        total_operacoes = acertos + erros
+                        fig, ax = plt.subplots(figsize=(1.1, 1.1))
+                        wedges, texts, autotexts = ax.pie(
+                            sizes,
+                            labels=None,
+                            autopct=make_autopct(sizes),
+                            startangle=90,
+                            colors=colors,
+                            wedgeprops=dict(width=0.35)
+                        )
+                        ax.axis("equal")
+                        plt.setp(autotexts, size=4, weight="semibold", color="#333333")
+                        ax.legend(wedges, labels, title="Taxa de Acerto", loc="center left", bbox_to_anchor=(1.85, 0.5), fontsize=5, title_fontsize=6)
 
-                        if total_operacoes == 0:
-                            st.info("Nenhum dado de acerto/erro disponível para exibir o gráfico.")
-                        else:
-                            labels = ["Acertos", "Erros"]
-                            sizes = [acertos, erros]
-                            colors = ["#00cc99", "#ff4d4f"]
+                        st.markdown("### 🎯 Taxa de Acerto")
+                        st.pyplot(fig)
 
-                            def make_autopct(values):
-                                def my_autopct(pct):
-                                    total = sum(values)
-                                    val = int(round(pct * total / 100.0))
-                                    return f"{val} ({pct:.1f}%)"
-                                return my_autopct
-
-                            fig, ax = plt.subplots(figsize=(1.1, 1.1))  # 📉 Reduzi o tamanho para 2x2
-                            wedges, texts, autotexts = ax.pie(
-                                sizes,
-                                labels=None,
-                                autopct=make_autopct(sizes),
-                                startangle=90,
-                                colors=colors,
-                                wedgeprops=dict(width=0.35)
-                            )
-
-                            ax.axis("equal")
-                            plt.setp(autotexts, size=4, weight="semibold", color="#333333")  # cinza escuro
-                            ax.legend(wedges, labels, title="Taxa de Acerto", loc="center left", bbox_to_anchor=(1.85, 0.5), fontsize=5, title_fontsize=6)
-
-                            st.markdown("### 🎯 Taxa de Acerto")
-                            st.pyplot(fig)
-
-                        # Agora sim: exibir a tabela após o gráfico
-                        st.markdown("### 🧾 Diagnóstico das Operações")
-                        st.table(df[["Data", "Ativo Vendido", "Ativo Comprado", "Resultado (R$)", "Status"]])
-
-                    except Exception as e:
-                        st.error(f"Erro ao calcular ou renderizar a taxa de acerto: {e}")
+                    st.markdown("### 🧾 Diagnóstico das Operações")
+                    st.table(df[["Data", "Ativo Vendido", "Ativo Comprado", "Resultado (R$)", "Status"]])
+                except Exception as e:
+                    st.error(f"Erro ao calcular ou renderizar a taxa de acerto: {e}")
