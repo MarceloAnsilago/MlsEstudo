@@ -1,7 +1,6 @@
 import pandas as pd
 import streamlit as st
 from streamlit_option_menu import option_menu
-from st_aggrid import AgGrid, GridOptionsBuilder
 import yfinance as yf
 import base64
 import os
